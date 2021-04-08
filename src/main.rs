@@ -1,13 +1,14 @@
 use warp::Filter;
 use warp::filters::ws::{Message, WebSocket};
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use futures::stream::SplitSink;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-pub struct WSMessage<'a> {
-    pub kind: &'a str,
-    pub message: Option<&'a str>,
+#[serde(tag = "type", rename_all = "lowercase")]
+enum WSMessage {
+    Joinned { message: Option<String>},
+    Join,
 }
 
 #[tokio::main]
@@ -48,16 +49,14 @@ async fn handle_message(msg: Message, sender: &mut SplitSink<WebSocket, Message>
         Err(_) => return,
     };
 
-    let m: WSMessage = serde_json::from_str(message).unwrap();
+    let received: WSMessage = serde_json::from_str(message).unwrap();
 
-    let response = serde_json::to_string(&WSMessage {
-        kind: "joinned",
-        message: Some("Welcome!"),
-    })
-    .unwrap();
+    let response = serde_json::to_string(&WSMessage::Joinned {
+        message: Some("Welcome!".to_string())
+    }).unwrap();
 
-    match m.kind {
-        "join" => sender.send(Message::text(response)).await.unwrap(),
-        &_ => ()
+    match received {
+        WSMessage::Join => sender.send(Message::text(response)).await.unwrap(),
+        _ => ()
     }
 }

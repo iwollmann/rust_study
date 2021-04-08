@@ -1,7 +1,7 @@
 const scoket = new WebSocket("ws://localhost:8080/ws");
 
 scoket.onopen = (event) => {
-    scoket.send(JSON.stringify({ kind: "join"}));
+    scoket.send(JSON.stringify({ type: "join"}));
 };
 
 scoket.onerror = (event) => {
