@@ -1,14 +1,15 @@
-use warp::Filter;
+use warp::{Filter, hyper::Uri};
 use warp::filters::ws::{Message, WebSocket};
 use futures::{SinkExt, StreamExt};
 use futures::stream::SplitSink;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 enum WSMessage {
     Joinned { message: Option<String>},
-    Join,
+    Join { room: String, id: u32 },
 }
 
 #[tokio::main]
@@ -18,6 +19,36 @@ async fn main() {
 
     let hello = warp::path("ping")
         .map(|| "pong");
+
+    let create_room = warp::path::end()
+        .map(|| {
+            let room_id = Uuid::new_v4();
+            warp::redirect(format!("/room/{}", room_id).parse::<Uri>().unwrap())
+        });
+
+    let room = warp::path("room")
+        .and(warp::path::param())
+        .map(|room_id: String| {
+            let body = format!(r#"
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>WebRTC Study</title>
+                <meta charset="UTF-8" />
+                <link href="/static/styles.css" rel="stylesheet" />
+                <script>
+                    const ROOM_ID = "{}"
+                </script>
+                <script src="/static/index.js" defer></script>
+            </head>
+            <body>
+                <div id="video-container"></div>
+                <!-- <button id="enable-audio">Enable audio</button> -->
+            </body>
+            </html>
+            "#, room_id);
+            warp::reply::html(body)
+        });
 
     let ws_route = warp::path("ws")
     .and(warp::ws())
@@ -39,7 +70,11 @@ async fn main() {
         })
     });
 
-    let routes = static_route.or(hello).or(ws_route);
+    let routes = static_route
+        .or(hello)
+        .or(create_room)
+        .or(room)
+        .or(ws_route);
     warp::serve(routes).run(([127, 0, 0, 1], 8080)).await;
 }
 
@@ -56,7 +91,7 @@ async fn handle_message(msg: Message, sender: &mut SplitSink<WebSocket, Message>
     }).unwrap();
 
     match received {
-        WSMessage::Join => sender.send(Message::text(response)).await.unwrap(),
+        WSMessage::Join { room, id} => sender.send(Message::text(response)).await.unwrap(),
         _ => ()
     }
 }
